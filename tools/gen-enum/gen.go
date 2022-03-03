@@ -196,11 +196,6 @@ func (g *Generator) findType(node ast.Node) bool {
 
 				hasName := fields.Has("name")
 
-				if !hasName {
-					v.Name = strings.ToLower(name.Name)
-					v.Name = strings.ReplaceAll(v.Name, "_", "-")
-				}
-
 				fields.Each(func(field string) bool {
 					idx := strings.LastIndex(field, "=")
 
@@ -215,7 +210,9 @@ func (g *Generator) findType(node ast.Node) bool {
 
 					return true
 				})
-
+			} else {
+				v.Name = strings.ToLower(strings.TrimSpace(name.Name))
+				v.Name = strings.ReplaceAll(v.Name, "_", "-")
 			}
 
 			g.values = append(g.values, v)
