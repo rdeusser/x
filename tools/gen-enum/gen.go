@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -191,16 +192,25 @@ func (g *Generator) findType(node ast.Node) bool {
 
 			comment := vspec.Comment
 			if comment != nil && len(comment.List) == 1 {
-				text := strings.ReplaceAll(strings.TrimSpace(comment.Text()), " ", "")
-				fields := strset.New(strings.Split(text, ",")...)
-
-				hasName := fields.Has("name")
+				text := strings.TrimSpace(comment.Text())
+				fields := strset.New(strings.Split(text, ", ")...)
 
 				fields.Each(func(field string) bool {
-					idx := strings.LastIndex(field, "=")
+					idx := strings.Index(field, "=")
 
-					if hasName && field == "name" {
-						v.Name = field[idx+1:]
+					if field[:idx] == "name" {
+						name := field[idx+1:]
+
+						if name[0] == '"' {
+							var err error
+
+							name, err = strconv.Unquote(name)
+							if err != nil {
+								log.Fatalf("%+v", err)
+							}
+						}
+
+						v.Name = name
 					}
 
 					if strings.Contains(field, "id") {
