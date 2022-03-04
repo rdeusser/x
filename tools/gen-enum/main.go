@@ -17,6 +17,7 @@ func main() {
 	flag := flag.NewFlagSet("gen-enum", flag.ContinueOnError)
 
 	flag.StringVar(&options.Type, "type", "", "type name")
+	flag.BoolVar(&options.Pointer, "pointer", false, "generate the type receiver as a pointer")
 	flag.BoolVar(&options.GenerateFlag, "generate-flag", false, "generate methods for flag interface")
 	flag.StringVar(&options.Output, "output", "", "output file name; default srcdir/<filename_with_type>_enum.go")
 	flag.StringVar(&options.BuildTags, "tags", "", "comma-separated list of build tags to apply")

@@ -29,6 +29,7 @@ type GeneratorOptions struct {
 	GenerateFlag bool
 	Output       string
 	Type         string
+	Pointer      bool
 }
 
 type Generator struct {
@@ -94,6 +95,7 @@ func (g *Generator) Run() ([]byte, error) {
 		GenerateFlag   bool
 		GenerateIDs    bool
 		PackageName    string
+		Pointer        bool
 		Type           string
 		UnderlyingType string
 		Values         []Value
@@ -102,6 +104,7 @@ func (g *Generator) Run() ([]byte, error) {
 		GenerateFlag:   g.options.GenerateFlag,
 		GenerateIDs:    g.generateIDs,
 		PackageName:    g.pkgName,
+		Pointer:        g.options.Pointer,
 		Type:           g.options.Type,
 		UnderlyingType: g.underlyingType,
 		Values:         g.values,
@@ -275,14 +278,26 @@ var _{{ .Type }}_type_to_id = map[{{ .Type }}]{{ .UnderlyingType }}{
 var ErrInvalid{{ .Type }} = errors.New("invalid {{ .Type }}")
 
 {{ if .GenerateIDs }}
+{{ if .Pointer }}
 func (i *{{ .Type }}) ID() {{ .UnderlyingType }} {
 	return _{{ .Type }}_type_to_id[*i]
 }
+{{ else }}
+func (i {{ .Type }}) ID() {{ .UnderlyingType }} {
+	return _{{ .Type }}_type_to_id[i]
+}
+{{ end }}
 {{ end }}
 
+{{ if .Pointer }}
 func (i *{{ .Type }}) String() string {
 	return _{{ .Type }}_type_to_string[*i]
 }
+{{ else }}
+func (i {{ .Type }}) String() string {
+	return _{{ .Type }}_type_to_string[i]
+}
+{{ end }}
 
 {{ if .GenerateFlag }}
 func (i *{{ .Type }}) Set(s string) error {
