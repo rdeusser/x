@@ -45,7 +45,8 @@ type Value struct {
 	ID           string
 	Name         string
 	OriginalName string
-	Value        string
+	Value        int64
+	String       string
 }
 
 func NewGenerator(options GeneratorOptions) *Generator {
@@ -165,18 +166,30 @@ func (g *Generator) findType(node ast.Node) bool {
 				log.Fatalf("no value for constant %q", typ)
 			}
 
+			var isSigned bool
+
 			info := obj.Type().Underlying().(*types.Basic)
 			switch info.Kind() {
 			case types.Int:
+				isSigned = true
 			case types.Int8:
+				isSigned = true
 			case types.Int16:
+				isSigned = true
 			case types.Int32:
+				isSigned = true
 			case types.Int64:
+				isSigned = true
 			case types.Uint:
+				isSigned = false
 			case types.Uint8:
+				isSigned = false
 			case types.Uint16:
+				isSigned = false
 			case types.Uint32:
+				isSigned = false
 			case types.Uint64:
+				isSigned = false
 			default:
 				log.Fatalf("%q must be an integer type", typ)
 			}
@@ -188,9 +201,17 @@ func (g *Generator) findType(node ast.Node) bool {
 				log.Fatalf("%q constant is not an integer", name)
 			}
 
+			i64, _ := constant.Int64Val(value)
+			u64, _ := constant.Uint64Val(value)
+
 			v := Value{
 				OriginalName: name.Name,
-				Value:        value.ExactString(),
+				Value:        i64,
+				String:       value.String(),
+			}
+
+			if !isSigned {
+				v.Value = int64(u64)
 			}
 
 			comment := vspec.Comment
@@ -244,8 +265,8 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant
 	// values have changed. Run the generator again.
 	var x [1]struct{}
-        {{- range $i, $value := .Values }}
-	_ = x[{{ $value.OriginalName }}-{{ $i }}]
+        {{- range .Values }}
+	_ = x[{{ .OriginalName }}-{{ .Value }}]
         {{- end }}
 }
 
