@@ -335,20 +335,38 @@ func (i *{{ .Type }}) Type() string {
 {{ end }}
 
 {{ if .GenerateIDs }}
+{{ if .Pointer }}
 func IDTo{{ .Type }}(i {{ .UnderlyingType }}) *{{ .Type }} {
 	if t, ok := _{{ .Type }}_id_to_type[i]; ok {
 		return &t
 	}
 	return nil
 }
+{{ else }}
+func IDTo{{ .Type }}(i {{ .UnderlyingType }}) {{ .Type }} {
+	if t, ok := _{{ .Type }}_id_to_type[i]; ok {
+		return t
+	}
+	return 0
+}
+{{ end }}
 {{ end }}
 
+{{ if .Pointer }}
 func StringTo{{ .Type }}(s string) *{{ .Type }} {
 	if t, ok := _{{ .Type }}_string_to_type[s]; ok {
 		return &t
 	}
 	return nil
 }
+{{ else }}
+func StringTo{{ .Type }}(s string) {{ .Type }} {
+	if t, ok := _{{ .Type }}_string_to_type[s]; ok {
+		return t
+	}
+	return 0
+}
+{{ end }}
 
 func Is{{ .Type }}(s string) bool {
 	if _, ok := _{{ .Type }}_string_to_type[s]; ok {
