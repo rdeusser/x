@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"flag"
+	"fmt"
 	"go/format"
 	"log"
 	"os"
@@ -52,7 +53,7 @@ func main() {
 			buf.WriteString(method)
 			buf.WriteString("AddMethod")
 			buf.WriteString("() string ")
-			buf.WriteString(" { return \"\" }")
+			buf.WriteString(fmt.Sprintf(" { return \"type(%s)\" }", sig.receiver))
 			buf.WriteString("\n")
 		}
 
