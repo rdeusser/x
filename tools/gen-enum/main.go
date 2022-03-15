@@ -7,9 +7,9 @@ import (
 	"os"
 )
 
-func main() {
-	var print bool
+var print bool
 
+func main() {
 	options := GeneratorOptions{
 		Args: os.Args[1:],
 	}
