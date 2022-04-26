@@ -7,13 +7,12 @@ package zappretty
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io"
 	"math"
 	"time"
 	"unicode/utf8"
 
-	"github.com/logrusorgru/aurora"
+	"github.com/fatih/color"
 	"go.uber.org/zap"
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
@@ -31,14 +30,14 @@ var (
 	nullLiteralBytes = []byte("null")
 	cliPool          = safepool.NewPool(&cliEncoder{})
 	bufPool          = buffer.NewPool()
-	levelColor       = map[zapcore.Level]aurora.Color{
-		zapcore.DebugLevel:  aurora.BlueFg,
-		zapcore.InfoLevel:   aurora.GreenFg,
-		zapcore.WarnLevel:   aurora.YellowFg,
-		zapcore.ErrorLevel:  aurora.RedFg,
-		zapcore.DPanicLevel: aurora.RedFg,
-		zapcore.PanicLevel:  aurora.RedFg,
-		zapcore.FatalLevel:  aurora.RedFg,
+	levelColor       = map[zapcore.Level]color.Attribute{
+		zapcore.DebugLevel:  color.FgBlue,
+		zapcore.InfoLevel:   color.FgGreen,
+		zapcore.WarnLevel:   color.FgYellow,
+		zapcore.ErrorLevel:  color.FgRed,
+		zapcore.DPanicLevel: color.FgRed,
+		zapcore.PanicLevel:  color.FgRed,
+		zapcore.FatalLevel:  color.FgRed,
 	}
 )
 
@@ -50,7 +49,6 @@ func Register(cfg zapcore.EncoderConfig) {
 
 type cliEncoder struct {
 	*zapcore.EncoderConfig
-	enc            zapcore.Encoder
 	buf            *buffer.Buffer
 	openNamespaces int
 
@@ -72,11 +70,7 @@ func NewCLIEncoder(cfg zapcore.EncoderConfig) zapcore.Encoder {
 
 	return &cliEncoder{
 		EncoderConfig: &cfg,
-		// TODO(rdeusser): Open a PR to allow the "spaced" struct field
-		// in `jsonEncoder` to be configurable. For now this is here,
-		// but it's not being used.
-		enc: zapcore.NewJSONEncoder(cfg),
-		buf: bufPool.Get(),
+		buf:           bufPool.Get(),
 	}
 }
 
@@ -115,7 +109,8 @@ func (enc *cliEncoder) EncodeEntry(entry zapcore.Entry, fields []zapcore.Field) 
 	}
 
 	if len(fields) > 0 {
-		final.buf.AppendByte('{')
+		final.buf.AppendString(colorize('{', color.FgWhite, color.Bold))
+		final.buf.AppendByte(' ')
 	}
 
 	// Add fields.
@@ -126,7 +121,8 @@ func (enc *cliEncoder) EncodeEntry(entry zapcore.Entry, fields []zapcore.Field) 
 	final.closeOpenNamespaces()
 
 	if len(fields) > 0 {
-		final.buf.AppendByte('}')
+		final.buf.AppendByte(' ')
+		final.buf.AppendString(colorize('}', color.FgWhite, color.Bold))
 	}
 
 	final.buf.AppendString(final.LineEnding)
@@ -309,9 +305,9 @@ func (enc *cliEncoder) AppendInt8(value int8)             { enc.AppendInt64(int6
 
 func (enc *cliEncoder) AppendString(value string) {
 	enc.addElementSeparator()
-	enc.buf.AppendByte('"')
-	enc.buf.AppendString(value)
-	enc.buf.AppendByte('"')
+	enc.buf.AppendString(colorize('"', color.FgGreen))
+	enc.buf.AppendString(colorize(value, color.FgGreen))
+	enc.buf.AppendString(colorize('"', color.FgGreen))
 }
 
 func (enc *cliEncoder) AppendUint(value uint)       { enc.AppendUint64(uint64(value)) }
@@ -347,9 +343,9 @@ func (enc *cliEncoder) AppendTime(value time.Time) {
 
 func (enc *cliEncoder) AppendArray(value zapcore.ArrayMarshaler) error {
 	enc.addElementSeparator()
-	enc.buf.AppendByte('[')
+	enc.buf.AppendString(colorize('[', color.FgWhite, color.Bold))
 	err := value.MarshalLogArray(enc)
-	enc.buf.AppendByte(']')
+	enc.buf.AppendString(colorize(']', color.FgWhite, color.Bold))
 	return err
 }
 
@@ -359,9 +355,9 @@ func (enc *cliEncoder) AppendObject(value zapcore.ObjectMarshaler) error {
 	old := enc.openNamespaces
 	enc.openNamespaces = 0
 	enc.addElementSeparator()
-	enc.buf.AppendByte('{')
+	enc.buf.AppendString(colorize('{', color.FgWhite, color.Bold))
 	err := value.MarshalLogObject(enc)
-	enc.buf.AppendByte('}')
+	enc.buf.AppendString(colorize('}', color.FgWhite, color.Bold))
 	enc.closeOpenNamespaces()
 	enc.openNamespaces = old
 	return err
@@ -438,42 +434,45 @@ func (enc *cliEncoder) appendFloat(val float64, bitSize int) {
 func (enc *cliEncoder) clone() *cliEncoder {
 	clone := cliPool.Get()
 	clone.EncoderConfig = enc.EncoderConfig
-	clone.enc = enc.enc.Clone()
 	clone.buf = bufPool.Get()
 	return clone
 }
 
 func (enc *cliEncoder) encodeTimestamp(timestamp time.Time) {
-	enc.buf.WriteString(fmt.Sprintf("[%s]", timestamp.Format(timeFormat)))
+	enc.buf.WriteString(color.New(color.FgWhite).Sprintf("[%s]", timestamp.Format(timeFormat)))
 	enc.buf.WriteString(" ")
 }
 
 func (enc *cliEncoder) encodeLevel(level zapcore.Level) {
-	enc.buf.WriteString(aurora.Colorize(level.CapitalString(), levelColor[level]).String())
+	if level == zapcore.InfoLevel {
+		enc.buf.WriteString(color.New(levelColor[level]).Sprint(level.CapitalString() + " "))
+	} else {
+		enc.buf.WriteString(color.New(levelColor[level]).Sprint(level.CapitalString()))
+	}
 	enc.buf.WriteString(" ")
 }
 
 func (enc *cliEncoder) encodeLoggerName(logger string) {
-	enc.buf.WriteString(aurora.Gray(12, fmt.Sprintf("%s", logger)).String())
+	enc.buf.WriteString(color.New(color.FgHiBlack).Sprint(logger))
 	enc.buf.WriteString(" ")
 }
 
 func (enc *cliEncoder) encodeCaller(caller zapcore.EntryCaller) {
-	enc.buf.WriteString(aurora.Gray(12, fmt.Sprintf("(%s)", caller.TrimmedPath())).String())
+	enc.buf.WriteString(color.New(color.FgHiBlack).Sprintf("(%s)", caller.TrimmedPath()))
 	enc.buf.WriteString(" ")
 }
 
 func (enc *cliEncoder) encodeMessage(message string) {
-	enc.buf.WriteString(aurora.Blue(message).String())
+	enc.buf.WriteString(color.New(color.FgHiWhite).Sprint(message))
 	enc.buf.WriteString(" ")
 }
 
 func (enc *cliEncoder) addKey(key string) {
 	enc.addElementSeparator()
-	enc.buf.AppendByte('"')
-	enc.buf.AppendString(key)
-	enc.buf.AppendByte('"')
-	enc.buf.AppendByte(':')
+	enc.buf.AppendString(colorize('"', color.FgBlue, color.Bold))
+	enc.buf.AppendString(colorize(key, color.FgBlue, color.Bold))
+	enc.buf.AppendString(colorize('"', color.FgBlue, color.Bold))
+	enc.buf.AppendString(colorize(':', color.FgBlue, color.Bold))
 	enc.buf.AppendByte(' ')
 }
 
@@ -486,14 +485,14 @@ func (enc *cliEncoder) addElementSeparator() {
 	case '{', '[', ':', ',', ' ':
 		return
 	default:
-		enc.buf.AppendByte(',')
+		enc.buf.AppendString(colorize(',', color.FgWhite, color.Bold))
 		enc.buf.AppendByte(' ')
 	}
 }
 
 func (enc *cliEncoder) closeOpenNamespaces() {
 	for i := 0; i < enc.openNamespaces; i++ {
-		enc.buf.AppendByte('}')
+		enc.buf.AppendString(colorize('}', color.FgWhite, color.Bold))
 	}
 	enc.openNamespaces = 0
 }
@@ -554,6 +553,17 @@ func (enc *cliEncoder) tryAddRuneError(r rune, size int) bool {
 		return true
 	}
 	return false
+}
+
+func colorize(arg any, attributes ...color.Attribute) string {
+	switch x := arg.(type) {
+	case byte:
+		return color.New(attributes...).Sprint(string(x))
+	case rune:
+		return color.New(attributes...).Sprint(string(x))
+	default:
+		return color.New(attributes...).Sprint(arg)
+	}
 }
 
 func defaultReflectedEncoder(w io.Writer) zapcore.ReflectedEncoder {
