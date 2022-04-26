@@ -60,6 +60,12 @@ type cliEncoder struct {
 }
 
 func NewCLIEncoder(cfg zapcore.EncoderConfig) zapcore.Encoder {
+	if cfg.SkipLineEnding {
+		cfg.LineEnding = ""
+	} else if cfg.LineEnding == "" {
+		cfg.LineEnding = zapcore.DefaultLineEnding
+	}
+
 	if cfg.NewReflectedEncoder == nil {
 		cfg.NewReflectedEncoder = defaultReflectedEncoder
 	}
@@ -84,39 +90,54 @@ func (enc *cliEncoder) EncodeEntry(entry zapcore.Entry, fields []zapcore.Field) 
 	final := enc.clone()
 
 	if final.TimeKey != "" {
-		enc.encodeTimestamp(entry.Time)
+		final.encodeTimestamp(entry.Time)
 	}
 
 	if final.LevelKey != "" && final.EncodeLevel != nil {
-		enc.encodeLevel(entry.Level)
+		final.encodeLevel(entry.Level)
 	}
 
 	if entry.LoggerName != "" && final.NameKey != "" {
-		enc.encodeLoggerName(entry.LoggerName)
+		final.encodeLoggerName(entry.LoggerName)
 	}
 
 	if entry.Caller.Defined && final.CallerKey != "" {
-		enc.encodeCaller(entry.Caller)
+		final.encodeCaller(entry.Caller)
 	}
 
 	if final.MessageKey != "" {
-		enc.encodeMessage(entry.Message)
+		final.encodeMessage(entry.Message)
 	}
 
-	enc.addFields(fields)
-
-	if enc.reflectBuf != nil {
-		enc.reflectBuf.Free()
+	if enc.buf.Len() > 0 {
+		final.addElementSeparator()
+		final.buf.Write(enc.buf.Bytes())
 	}
 
-	buf := enc.buf
+	final.buf.AppendByte('{')
 
-	enc.EncoderConfig = nil
-	enc.buf = nil
-	enc.openNamespaces = 0
-	enc.reflectBuf = nil
-	enc.reflectEnc = nil
-	cliPool.Put(enc)
+	// Add fields.
+	for i := range fields {
+		fields[i].AddTo(final)
+	}
+
+	final.closeOpenNamespaces()
+
+	final.buf.AppendByte('}')
+	final.buf.AppendString(final.LineEnding)
+
+	buf := final.buf
+
+	if final.reflectBuf != nil {
+		final.reflectBuf.Free()
+	}
+
+	final.EncoderConfig = nil
+	final.buf = nil
+	final.openNamespaces = 0
+	final.reflectBuf = nil
+	final.reflectEnc = nil
+	cliPool.Put(final)
 
 	return buf, nil
 }
@@ -433,19 +454,13 @@ func (enc *cliEncoder) encodeLoggerName(logger string) {
 }
 
 func (enc *cliEncoder) encodeCaller(caller zapcore.EntryCaller) {
-	enc.buf.WriteString(aurora.Gray(12, fmt.Sprintf("(%s)", caller)).String())
+	enc.buf.WriteString(aurora.Gray(12, fmt.Sprintf("(%s)", caller.TrimmedPath())).String())
 	enc.buf.WriteString(" ")
 }
 
 func (enc *cliEncoder) encodeMessage(message string) {
 	enc.buf.WriteString(aurora.Blue(message).String())
 	enc.buf.WriteString(" ")
-}
-
-func (enc *cliEncoder) addFields(fields []zapcore.Field) {
-	for i := range fields {
-		fields[i].AddTo(enc)
-	}
 }
 
 func (enc *cliEncoder) addKey(key string) {
