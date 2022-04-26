@@ -114,7 +114,9 @@ func (enc *cliEncoder) EncodeEntry(entry zapcore.Entry, fields []zapcore.Field) 
 		final.buf.Write(enc.buf.Bytes())
 	}
 
-	final.buf.AppendByte('{')
+	if len(fields) > 0 {
+		final.buf.AppendByte('{')
+	}
 
 	// Add fields.
 	for i := range fields {
@@ -123,7 +125,10 @@ func (enc *cliEncoder) EncodeEntry(entry zapcore.Entry, fields []zapcore.Field) 
 
 	final.closeOpenNamespaces()
 
-	final.buf.AppendByte('}')
+	if len(fields) > 0 {
+		final.buf.AppendByte('}')
+	}
+
 	final.buf.AppendString(final.LineEnding)
 
 	buf := final.buf
@@ -305,7 +310,7 @@ func (enc *cliEncoder) AppendInt8(value int8)             { enc.AppendInt64(int6
 func (enc *cliEncoder) AppendString(value string) {
 	enc.addElementSeparator()
 	enc.buf.AppendByte('"')
-	enc.safeAddString(value)
+	enc.buf.AppendString(value)
 	enc.buf.AppendByte('"')
 }
 
@@ -466,7 +471,7 @@ func (enc *cliEncoder) encodeMessage(message string) {
 func (enc *cliEncoder) addKey(key string) {
 	enc.addElementSeparator()
 	enc.buf.AppendByte('"')
-	enc.safeAddString(key)
+	enc.buf.AppendString(key)
 	enc.buf.AppendByte('"')
 	enc.buf.AppendByte(':')
 	enc.buf.AppendByte(' ')
@@ -491,25 +496,6 @@ func (enc *cliEncoder) closeOpenNamespaces() {
 		enc.buf.AppendByte('}')
 	}
 	enc.openNamespaces = 0
-}
-
-// safeAddString JSON-escapes a string and appends it to the internal buffer.
-// Unlike the standard library's encoder, it doesn't attempt to protect the user
-// from browser vulnerabilities or JSONP-related problems.
-func (enc *cliEncoder) safeAddString(s string) {
-	for i := 0; i < len(s); {
-		if enc.tryAddRuneSelf(s[i]) {
-			i++
-			continue
-		}
-		r, size := utf8.DecodeRuneInString(s[i:])
-		if enc.tryAddRuneError(r, size) {
-			i++
-			continue
-		}
-		enc.buf.AppendString(s[i : i+size])
-		i += size
-	}
 }
 
 // safeAddByteString is no-alloc equivalent of safeAddString(string(s)) for s
