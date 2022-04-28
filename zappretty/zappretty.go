@@ -298,10 +298,15 @@ func (enc *cliEncoder) AppendComplex64(value complex64)   { enc.appendComplex(co
 func (enc *cliEncoder) AppendFloat64(value float64)       { enc.appendFloat(value, 64) }
 func (enc *cliEncoder) AppendFloat32(value float32)       { enc.appendFloat(float64(value), 32) }
 func (enc *cliEncoder) AppendInt(value int)               { enc.AppendInt64(int64(value)) }
-func (enc *cliEncoder) AppendInt64(value int64)           { enc.AppendInt64(int64(value)) }
-func (enc *cliEncoder) AppendInt32(value int32)           { enc.AppendInt64(int64(value)) }
-func (enc *cliEncoder) AppendInt16(value int16)           { enc.AppendInt64(int64(value)) }
-func (enc *cliEncoder) AppendInt8(value int8)             { enc.AppendInt64(int64(value)) }
+
+func (enc *cliEncoder) AppendInt64(value int64) {
+	enc.addElementSeparator()
+	enc.buf.AppendInt(value)
+}
+
+func (enc *cliEncoder) AppendInt32(value int32) { enc.AppendInt64(int64(value)) }
+func (enc *cliEncoder) AppendInt16(value int16) { enc.AppendInt64(int64(value)) }
+func (enc *cliEncoder) AppendInt8(value int8)   { enc.AppendInt64(int64(value)) }
 
 func (enc *cliEncoder) AppendString(value string) {
 	enc.addElementSeparator()
