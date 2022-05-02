@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"io"
 	"math"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -16,8 +17,6 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
-
-	"github.com/rdeusser/x/safepool"
 )
 
 const (
@@ -28,9 +27,11 @@ const (
 
 var (
 	nullLiteralBytes = []byte("null")
-	cliPool          = safepool.NewPool(&cliEncoder{})
-	bufPool          = buffer.NewPool()
-	levelColor       = map[zapcore.Level]color.Attribute{
+	cliPool          = sync.Pool{New: func() interface{} {
+		return &cliEncoder{}
+	}}
+	bufPool    = buffer.NewPool()
+	levelColor = map[zapcore.Level]color.Attribute{
 		zapcore.DebugLevel:  color.FgBlue,
 		zapcore.InfoLevel:   color.FgGreen,
 		zapcore.WarnLevel:   color.FgYellow,
@@ -42,7 +43,7 @@ var (
 )
 
 func Register(cfg zapcore.EncoderConfig) {
-	zap.RegisterEncoder("cli", func(_ zapcore.EncoderConfig) (zapcore.Encoder, error) {
+	_ = zap.RegisterEncoder("cli", func(_ zapcore.EncoderConfig) (zapcore.Encoder, error) {
 		return NewCLIEncoder(cfg), nil
 	})
 }
@@ -58,20 +59,22 @@ type cliEncoder struct {
 }
 
 func NewCLIEncoder(cfg zapcore.EncoderConfig) zapcore.Encoder {
-	if cfg.SkipLineEnding {
-		cfg.LineEnding = ""
-	} else if cfg.LineEnding == "" {
-		cfg.LineEnding = zapcore.DefaultLineEnding
-	}
+	cfg.LineEnding = zapcore.DefaultLineEnding
 
 	if cfg.NewReflectedEncoder == nil {
 		cfg.NewReflectedEncoder = defaultReflectedEncoder
 	}
 
-	return &cliEncoder{
+	encoder := &cliEncoder{
 		EncoderConfig: &cfg,
 		buf:           bufPool.Get(),
 	}
+
+	return encoder
+}
+
+func newCLIEncoder() *cliEncoder {
+	return &cliEncoder{}
 }
 
 func (enc *cliEncoder) Clone() zapcore.Encoder {
@@ -128,22 +131,10 @@ func (enc *cliEncoder) EncodeEntry(entry zapcore.Entry, fields []zapcore.Field) 
 	final.buf.AppendString(final.LineEnding)
 
 	buf := final.buf
-
-	if final.reflectBuf != nil {
-		final.reflectBuf.Free()
-	}
-
-	final.EncoderConfig = nil
-	final.buf = nil
-	final.openNamespaces = 0
-	final.reflectBuf = nil
-	final.reflectEnc = nil
-	cliPool.Put(final)
-
+	putCLIEncoder(final)
 	return buf, nil
 }
 
-// Logging-specific marshalers.
 func (enc *cliEncoder) AddArray(key string, marshaler zapcore.ArrayMarshaler) error {
 	enc.addKey(key)
 	return enc.AppendArray(marshaler)
@@ -154,7 +145,6 @@ func (enc *cliEncoder) AddObject(key string, marshaler zapcore.ObjectMarshaler) 
 	return enc.AppendObject(marshaler)
 }
 
-// Built-in types.
 func (enc *cliEncoder) AddBinary(key string, value []byte) {
 	enc.AddString(key, base64.StdEncoding.EncodeToString(value))
 }
@@ -437,7 +427,7 @@ func (enc *cliEncoder) appendFloat(val float64, bitSize int) {
 }
 
 func (enc *cliEncoder) clone() *cliEncoder {
-	clone := cliPool.Get()
+	clone := getCLIEncoder()
 	clone.EncoderConfig = enc.EncoderConfig
 	clone.buf = bufPool.Get()
 	return clone
@@ -560,6 +550,29 @@ func (enc *cliEncoder) tryAddRuneError(r rune, size int) bool {
 	return false
 }
 
+func getCLIEncoder() *cliEncoder {
+	return cliPool.Get().(*cliEncoder)
+}
+
+func putCLIEncoder(enc *cliEncoder) {
+	if enc.reflectBuf != nil {
+		enc.reflectBuf.Free()
+	}
+	enc.EncoderConfig = nil
+	enc.buf = nil
+	enc.openNamespaces = 0
+	enc.reflectBuf = nil
+	enc.reflectEnc = nil
+	cliPool.Put(enc)
+}
+
+func defaultReflectedEncoder(w io.Writer) zapcore.ReflectedEncoder {
+	enc := json.NewEncoder(w)
+	// For consistency with our custom JSON encoder.
+	enc.SetEscapeHTML(false)
+	return enc
+}
+
 func colorize(arg any, attributes ...color.Attribute) string {
 	switch x := arg.(type) {
 	case byte:
@@ -569,11 +582,4 @@ func colorize(arg any, attributes ...color.Attribute) string {
 	default:
 		return color.New(attributes...).Sprint(arg)
 	}
-}
-
-func defaultReflectedEncoder(w io.Writer) zapcore.ReflectedEncoder {
-	enc := json.NewEncoder(w)
-	// For consistency with our custom JSON encoder.
-	enc.SetEscapeHTML(false)
-	return enc
 }
