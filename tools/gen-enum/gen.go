@@ -237,7 +237,7 @@ func (g *Generator) findType(node ast.Node) bool {
 						v.Name = name
 					}
 
-					if strings.Contains(field, "id") {
+					if strings.Contains(field, "id=") {
 						v.ID = field[idx+1:]
 						g.generateIDs = true
 					}
