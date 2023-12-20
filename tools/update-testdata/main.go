@@ -1,9 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io/fs"
 	"log"
 	"os"
 	"os/exec"
@@ -11,7 +10,7 @@ import (
 )
 
 func ensureModPath() error {
-	_, err := ioutil.ReadFile("go.mod")
+	_, err := os.ReadFile("go.mod")
 	if err != nil {
 		return err
 	}
@@ -25,31 +24,17 @@ func findTestData() ([]string, error) {
 		return paths, err
 	}
 
-	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+	err := fs.WalkDir(os.DirFS("."), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
-		if info.IsDir() && info.Name() == "tools" {
-			log.Println("skipping tools directory")
-			return filepath.SkipDir
-		}
-
-		if filepath.Ext(info.Name()) != ".go" {
+		if !d.IsDir() {
 			return nil
 		}
 
-		file, err := ioutil.ReadFile(path)
-		if err != nil {
-			return err
-		}
-
-		if bytes.Contains(file, []byte("github.com/hexops/autogold")) {
-			absPath, err := filepath.Abs(filepath.Dir(path))
-			if err != nil {
-				return err
-			}
-			paths = append(paths, absPath)
+		if d.Name() == "testdata" {
+			paths = append(paths, filepath.Dir(path))
 		}
 
 		return nil
